@@ -1,4 +1,3 @@
 @echo off
 set AWS_PROFILE=irisawamasaru
-cd /d %~dp0tester
-cargo run --bin create-stack
+cargo run --manifest-path %~dp0tester\Cargo.toml --bin create-stack
