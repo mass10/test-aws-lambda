@@ -24,15 +24,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_caller_arn() -> Result<String, Box<dyn std::error::Error>> {
-    let out = Command::new("aws")
-        .args(["sts", "get-caller-identity", "--query", "Arn", "--output", "text"])
+    let out = aws(&["sts", "get-caller-identity", "--query", "Arn", "--output", "text"])
         .output()?;
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
 fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let out = Command::new("aws")
-        .args(["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
+    let out = aws(&["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
         .output()?;
 
     if out.status.success() {
@@ -45,28 +43,26 @@ fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std
     let tag_at = format!("Key=CreatedAt,Value={created_at}");
     let tag_by = format!("Key=CreatedBy,Value={created_by}");
 
-    run("aws", &[
+    run(&[
         "iam", "create-role",
         "--role-name", ROLE_NAME,
         "--assume-role-policy-document", trust_policy,
         "--tags", &tag_project, &tag_at, &tag_by,
     ])?;
-    run("aws", &[
+    run(&[
         "iam", "attach-role-policy",
         "--role-name", ROLE_NAME,
         "--policy-arn", "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
     ])?;
 
-    let out = Command::new("aws")
-        .args(["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
+    let out = aws(&["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
         .output()?;
 
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
 fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let exists = Command::new("aws")
-        .args(["lambda", "get-function", "--function-name", FUNCTION_NAME])
+    let exists = aws(&["lambda", "get-function", "--function-name", FUNCTION_NAME])
         .output()?
         .status
         .success();
@@ -80,7 +76,7 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
     let zip_arg = format!("fileb://{}", zip_path.display());
     let tags = format!("Project={PROJECT},CreatedAt={created_at},CreatedBy={created_by}");
 
-    run("aws", &[
+    run(&[
         "lambda", "create-function",
         "--function-name", FUNCTION_NAME,
         "--runtime", "python3.12",
@@ -91,7 +87,7 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
         "--tags", &tags,
     ])?;
 
-    run("aws", &["lambda", "wait", "function-active", "--function-name", FUNCTION_NAME])?;
+    run(&["lambda", "wait", "function-active", "--function-name", FUNCTION_NAME])?;
 
     Ok(())
 }
@@ -118,10 +114,16 @@ fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     Ok(zip_path)
 }
 
-fn run(cmd: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let status = Command::new(cmd).args(args).status()?;
+fn aws(args: &[&str]) -> Command {
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/c").arg("aws").args(args);
+    cmd
+}
+
+fn run(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let status = aws(args).status()?;
     if !status.success() {
-        return Err(format!("{cmd} {args:?} failed").into());
+        return Err(format!("aws {args:?} failed").into());
     }
     Ok(())
 }

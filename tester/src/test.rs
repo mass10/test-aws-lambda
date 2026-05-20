@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     invoke_parallel()?;
 
     println!("\n=== 並列呼び出し不可（同時実行数 = 1）===");
-    run("aws", &[
+    run(&[
         "lambda", "put-function-concurrency",
         "--function-name", FUNCTION_NAME,
         "--reserved-concurrent-executions", "1",
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     invoke_parallel()?;
 
-    run("aws", &["lambda", "delete-function-concurrency", "--function-name", FUNCTION_NAME])?;
+    run(&["lambda", "delete-function-concurrency", "--function-name", FUNCTION_NAME])?;
     println!("\n[test] reserved concurrency 解除済み");
 
     Ok(())
@@ -40,15 +40,14 @@ fn invoke_parallel() -> Result<(), Box<dyn std::error::Error>> {
 
                 std::fs::write(&payload_file, format!(r#"{{"sleep": 3, "id": {i}}}"#)).unwrap();
 
-                let status = Command::new("aws")
-                    .args([
-                        "lambda", "invoke",
-                        "--function-name", FUNCTION_NAME,
-                        "--payload", &format!("fileb://{}", payload_file.display()),
-                        output_file.to_str().unwrap(),
-                    ])
-                    .status()
-                    .unwrap();
+                let status = aws(&[
+                    "lambda", "invoke",
+                    "--function-name", FUNCTION_NAME,
+                    "--payload", &format!("fileb://{}", payload_file.display()),
+                    output_file.to_str().unwrap(),
+                ])
+                .status()
+                .unwrap();
 
                 let body = if output_file.exists() {
                     std::fs::read_to_string(&output_file).unwrap_or_default()
@@ -77,10 +76,16 @@ fn invoke_parallel() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run(cmd: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    let status = Command::new(cmd).args(args).status()?;
+fn aws(args: &[&str]) -> Command {
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/c").arg("aws").args(args);
+    cmd
+}
+
+fn run(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+    let status = aws(args).status()?;
     if !status.success() {
-        return Err(format!("{cmd} failed").into());
+        return Err(format!("aws {args:?} failed").into());
     }
     Ok(())
 }
