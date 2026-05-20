@@ -1,23 +1,36 @@
 use std::io::Write;
 use std::process::Command;
+use chrono::Utc;
 
 const FUNCTION_NAME: &str = "test-parallel-invocation";
 const ROLE_NAME: &str = "test-parallel-invocation-role";
+const PROJECT: &str = "test-parallel-invocation";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let role_arn = ensure_role()?;
+    let created_at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let created_by = get_caller_arn()?;
+    println!("[setup] CreatedBy: {created_by}");
+
+    let role_arn = ensure_role(&created_at, &created_by)?;
     println!("[setup] IAM role: {role_arn}");
 
     // Lambda が IAM ロールを認識するまで待機
     std::thread::sleep(std::time::Duration::from_secs(10));
 
-    ensure_function(&role_arn)?;
+    ensure_function(&role_arn, &created_at, &created_by)?;
     println!("[setup] Lambda function '{FUNCTION_NAME}' ready.");
 
     Ok(())
 }
 
-fn ensure_role() -> Result<String, Box<dyn std::error::Error>> {
+fn get_caller_arn() -> Result<String, Box<dyn std::error::Error>> {
+    let out = Command::new("aws")
+        .args(["sts", "get-caller-identity", "--query", "Arn", "--output", "text"])
+        .output()?;
+    Ok(String::from_utf8(out.stdout)?.trim().to_string())
+}
+
+fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std::error::Error>> {
     let out = Command::new("aws")
         .args(["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
         .output()?;
@@ -28,7 +41,16 @@ fn ensure_role() -> Result<String, Box<dyn std::error::Error>> {
 
     let trust_policy = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#;
 
-    run("aws", &["iam", "create-role", "--role-name", ROLE_NAME, "--assume-role-policy-document", trust_policy])?;
+    let tag_project = format!("Key=Project,Value={PROJECT}");
+    let tag_at = format!("Key=CreatedAt,Value={created_at}");
+    let tag_by = format!("Key=CreatedBy,Value={created_by}");
+
+    run("aws", &[
+        "iam", "create-role",
+        "--role-name", ROLE_NAME,
+        "--assume-role-policy-document", trust_policy,
+        "--tags", &tag_project, &tag_at, &tag_by,
+    ])?;
     run("aws", &[
         "iam", "attach-role-policy",
         "--role-name", ROLE_NAME,
@@ -42,7 +64,7 @@ fn ensure_role() -> Result<String, Box<dyn std::error::Error>> {
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
-fn ensure_function(role_arn: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result<(), Box<dyn std::error::Error>> {
     let exists = Command::new("aws")
         .args(["lambda", "get-function", "--function-name", FUNCTION_NAME])
         .output()?
@@ -56,6 +78,7 @@ fn ensure_function(role_arn: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let zip_path = build_zip()?;
     let zip_arg = format!("fileb://{}", zip_path.display());
+    let tags = format!("Project={PROJECT},CreatedAt={created_at},CreatedBy={created_by}");
 
     run("aws", &[
         "lambda", "create-function",
@@ -65,6 +88,7 @@ fn ensure_function(role_arn: &str) -> Result<(), Box<dyn std::error::Error>> {
         "--handler", "handler.handler",
         "--zip-file", &zip_arg,
         "--timeout", "30",
+        "--tags", &tags,
     ])?;
 
     run("aws", &["lambda", "wait", "function-active", "--function-name", FUNCTION_NAME])?;
