@@ -78,6 +78,7 @@ fn invoke_parallel() -> Result<(), Box<dyn std::error::Error>> {
 
 fn aws(args: &[&str]) -> Command {
     let mut cmd = Command::new("cmd");
+    cmd.env("AWS_MAX_ATTEMPTS", "1");
     cmd.arg("/c").arg("aws").args(args);
     cmd
 }
