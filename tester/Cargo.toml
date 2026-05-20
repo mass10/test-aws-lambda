@@ -1,0 +1,19 @@
+[package]
+name = "tester"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "setup"
+path = "src/setup.rs"
+
+[[bin]]
+name = "teardown"
+path = "src/teardown.rs"
+
+[[bin]]
+name = "test"
+path = "src/test.rs"
+
+[dependencies]
+zip = "2"
