@@ -39,25 +39,28 @@ fn invoke_parallel() -> Result<(), Box<dyn std::error::Error>> {
                 let output_file = tmp.join(format!("lambda_out_{i}.json"));
 
                 std::fs::write(&payload_file, format!(r#"{{"sleep": 3, "id": {i}}}"#)).unwrap();
+                let _ = std::fs::remove_file(&output_file);
 
                 let t = Instant::now();
-                let status = aws(&[
+                let ok = aws(&[
                     "lambda", "invoke",
                     "--function-name", FUNCTION_NAME,
                     "--payload", &format!("fileb://{}", payload_file.display()),
                     output_file.to_str().unwrap(),
                 ])
                 .status()
-                .unwrap();
+                .unwrap()
+                .success();
                 let elapsed = t.elapsed();
 
-                let body = if output_file.exists() {
-                    std::fs::read_to_string(&output_file).unwrap_or_default()
+                let summary = if ok {
+                    let body = std::fs::read_to_string(&output_file).unwrap_or_default();
+                    summarize(&body)
                 } else {
-                    format!("(exit: {status})")
+                    "スロットリング".to_string()
                 };
 
-                results.lock().unwrap().push((i, body, elapsed));
+                results.lock().unwrap().push((i, summary, elapsed));
             })
         })
         .collect();
@@ -70,8 +73,7 @@ fn invoke_parallel() -> Result<(), Box<dyn std::error::Error>> {
     let mut results = results.lock().unwrap();
     results.sort_by_key(|(i, _, _)| *i);
 
-    for (i, body, elapsed) in results.iter() {
-        let summary = summarize(body);
+    for (i, summary, elapsed) in results.iter() {
         log("info", "invoke", &format!("[{i}] {summary} ({elapsed:.2?})"));
     }
     log("info", "invoke", &format!("合計経過時間: {total:.2?}"));
