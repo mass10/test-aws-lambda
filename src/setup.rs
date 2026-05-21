@@ -9,16 +9,17 @@ const PROJECT: &str = "test-parallel-invocation";
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let created_at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let created_by = get_caller_arn()?;
-    println!("[setup] CreatedBy: {created_by}");
+    log("info", "setup", &format!("実行者: {created_by}"));
 
     let role_arn = ensure_role(&created_at, &created_by)?;
-    println!("[setup] IAM role: {role_arn}");
+    log("info", "setup", &format!("IAM ロール: {role_arn}"));
 
     // Lambda が IAM ロールを認識するまで待機
+    log("info", "setup", "IAM ロールの反映を待機中 (10s)。");
     std::thread::sleep(std::time::Duration::from_secs(10));
 
     ensure_function(&role_arn, &created_at, &created_by)?;
-    println!("[setup] Lambda function '{FUNCTION_NAME}' ready.");
+    log("info", "setup", &format!("Lambda 関数 '{FUNCTION_NAME}' の準備完了。"));
 
     Ok(())
 }
@@ -34,8 +35,11 @@ fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std
         .output()?;
 
     if out.status.success() {
+        log("info", "role", "既存のロールを使用する。");
         return Ok(String::from_utf8(out.stdout)?.trim().to_string());
     }
+
+    log("info", "role", &format!("ロール '{ROLE_NAME}' を作成する。"));
 
     let trust_policy = r#"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#;
 
@@ -68,9 +72,11 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
         .success();
 
     if exists {
-        println!("[setup] function already exists, skipping.");
+        log("info", "function", "既存の関数を使用する。");
         return Ok(());
     }
+
+    log("info", "function", &format!("関数 '{FUNCTION_NAME}' を作成する。"));
 
     let zip_path = build_zip()?;
     let zip_arg = format!("fileb://{}", zip_path.display());
@@ -87,6 +93,7 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
         "--tags", &tags,
     ])?;
 
+    log("info", "function", "関数がアクティブになるまで待機中。");
     run(&["lambda", "wait", "function-active", "--function-name", FUNCTION_NAME])?;
 
     Ok(())
@@ -108,6 +115,11 @@ fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     zip.finish()?;
 
     Ok(zip_path)
+}
+
+fn log(level: &str, scope: &str, msg: &str) {
+    let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
+    println!("{ts} [{level}] {scope}  {msg}");
 }
 
 fn aws(args: &[&str]) -> Command {
