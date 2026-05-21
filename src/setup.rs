@@ -94,15 +94,11 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
 
 fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let handler_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
         .join("lambda/handler.py");
 
     let handler_bytes = std::fs::read(&handler_path)?;
 
     let zip_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
         .join("lambda/handler.zip");
 
     let file = std::fs::File::create(&zip_path)?;

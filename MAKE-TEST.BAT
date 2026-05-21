@@ -1,3 +1,3 @@
 @echo off
 set AWS_PROFILE=irisawamasaru
-cargo run --manifest-path %~dp0tester\Cargo.toml --bin test
+cargo run --manifest-path %~dp0Cargo.toml --bin test

@@ -1,2 +1,3 @@
-tester/target/
+target/
 lambda/handler.zip
+.claude/
