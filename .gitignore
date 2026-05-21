@@ -1,3 +1,4 @@
 target/
 lambda/handler.zip
 .claude/
+/OUT/
