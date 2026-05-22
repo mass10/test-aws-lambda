@@ -6,6 +6,7 @@ const FUNCTION_NAME: &str = "test-parallel-invocation";
 const ROLE_NAME: &str = "test-parallel-invocation-role";
 const PROJECT: &str = "test-parallel-invocation";
 
+/// IAM ロールと Lambda 関数をセットアップするエントリポイント。
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let created_at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let created_by = get_caller_arn()?;
@@ -24,12 +25,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// AWS STS で現在の実行者の ARN を取得して返す。
 fn get_caller_arn() -> Result<String, Box<dyn std::error::Error>> {
     let out = aws(&["sts", "get-caller-identity", "--query", "Arn", "--output", "text"])
         .output()?;
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
+/// IAM ロールが存在しない場合は作成してポリシーをアタッチし、ロールの ARN を返す。
+///
+/// # 引数
+///
+/// * `created_at` - リソースタグ `CreatedAt` に付与する作成日時（ISO 8601 形式）
+/// * `created_by` - リソースタグ `CreatedBy` に付与する実行者 ARN
 fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std::error::Error>> {
     let out = aws(&["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
         .output()?;
@@ -65,6 +73,13 @@ fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std
     Ok(String::from_utf8(out.stdout)?.trim().to_string())
 }
 
+/// Lambda 関数が存在しない場合は ZIP をビルドして関数を作成し、アクティブになるまで待機する。
+///
+/// # 引数
+///
+/// * `role_arn` - Lambda 関数に割り当てる IAM ロールの ARN
+/// * `created_at` - リソースタグ `CreatedAt` に付与する作成日時（ISO 8601 形式）
+/// * `created_by` - リソースタグ `CreatedBy` に付与する実行者 ARN
 fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result<(), Box<dyn std::error::Error>> {
     let exists = aws(&["lambda", "get-function", "--function-name", FUNCTION_NAME])
         .output()?
@@ -99,6 +114,7 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
     Ok(())
 }
 
+/// handler.py を読み込んで ZIP 圧縮し、生成したファイルのパスを返す。
 fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let handler_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("lambda/handler.py");
@@ -117,17 +133,20 @@ fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     Ok(zip_path)
 }
 
+/// タイムスタンプ・レベル・スコープ付きでログを標準出力に出力する。
 fn log(level: &str, scope: &str, msg: &str) {
     let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
     println!("{ts} [{level}] {scope}  {msg}");
 }
 
+/// 指定した引数で AWS CLI を呼び出す Command を組み立てて返す。
 fn aws(args: &[&str]) -> Command {
     let mut cmd = Command::new("cmd");
     cmd.arg("/c").arg("aws").args(args);
     cmd
 }
 
+/// AWS CLI コマンドを実行し、失敗時はエラーを返す。
 fn run(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
     let status = aws(args).status()?;
     if !status.success() {
