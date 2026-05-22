@@ -26,6 +26,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// AWS STS で現在の実行者の ARN を取得して返す。
+///
+/// # Returns
+///
+/// 現在の実行者の ARN 文字列。
 fn get_caller_arn() -> Result<String, Box<dyn std::error::Error>> {
     let out = aws(&["sts", "get-caller-identity", "--query", "Arn", "--output", "text"])
         .output()?;
@@ -34,10 +38,14 @@ fn get_caller_arn() -> Result<String, Box<dyn std::error::Error>> {
 
 /// IAM ロールが存在しない場合は作成してポリシーをアタッチし、ロールの ARN を返す。
 ///
-/// # 引数
+/// # Arguments
 ///
 /// * `created_at` - リソースタグ `CreatedAt` に付与する作成日時（ISO 8601 形式）
 /// * `created_by` - リソースタグ `CreatedBy` に付与する実行者 ARN
+///
+/// # Returns
+///
+/// 既存または新規作成したロールの ARN 文字列。
 fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std::error::Error>> {
     let out = aws(&["iam", "get-role", "--role-name", ROLE_NAME, "--query", "Role.Arn", "--output", "text"])
         .output()?;
@@ -75,7 +83,7 @@ fn ensure_role(created_at: &str, created_by: &str) -> Result<String, Box<dyn std
 
 /// Lambda 関数が存在しない場合は ZIP をビルドして関数を作成し、アクティブになるまで待機する。
 ///
-/// # 引数
+/// # Arguments
 ///
 /// * `role_arn` - Lambda 関数に割り当てる IAM ロールの ARN
 /// * `created_at` - リソースタグ `CreatedAt` に付与する作成日時（ISO 8601 形式）
@@ -115,6 +123,10 @@ fn ensure_function(role_arn: &str, created_at: &str, created_by: &str) -> Result
 }
 
 /// handler.py を読み込んで ZIP 圧縮し、生成したファイルのパスを返す。
+///
+/// # Returns
+///
+/// 生成した ZIP ファイルの絶対パス。
 fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let handler_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("lambda/handler.py");
@@ -134,12 +146,26 @@ fn build_zip() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
 }
 
 /// タイムスタンプ・レベル・スコープ付きでログを標準出力に出力する。
+///
+/// # Arguments
+///
+/// * `level` - ログレベル（例: `"info"`, `"error"`）
+/// * `scope` - 出力元を示すスコープ名（例: `"setup"`, `"role"`）
+/// * `msg` - 出力するメッセージ
 fn log(level: &str, scope: &str, msg: &str) {
     let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
     println!("{ts} [{level}] {scope}  {msg}");
 }
 
 /// 指定した引数で AWS CLI を呼び出す Command を組み立てて返す。
+///
+/// # Arguments
+///
+/// * `args` - `aws` コマンドに渡すサブコマンドおよびオプションの配列
+///
+/// # Returns
+///
+/// 実行準備済みの `Command`。
 fn aws(args: &[&str]) -> Command {
     let mut cmd = Command::new("cmd");
     cmd.arg("/c").arg("aws").args(args);
@@ -147,6 +173,14 @@ fn aws(args: &[&str]) -> Command {
 }
 
 /// AWS CLI コマンドを実行し、失敗時はエラーを返す。
+///
+/// # Arguments
+///
+/// * `args` - `aws` コマンドに渡すサブコマンドおよびオプションの配列
+///
+/// # Returns
+///
+/// 成功時は `Ok(())`、コマンドが非ゼロ終了した場合はエラー。
 fn run(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
     let status = aws(args).status()?;
     if !status.success() {
