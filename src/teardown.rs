@@ -37,12 +37,26 @@ fn delete_role() {
 }
 
 /// タイムスタンプ・レベル・スコープ付きでログを標準出力に出力する。
+///
+/// # Arguments
+///
+/// * `level` - ログレベル（例: `"info"`, `"error"`）
+/// * `scope` - 出力元を示すスコープ名（例: `"teardown"`, `"role"`）
+/// * `msg` - 出力するメッセージ
 fn log(level: &str, scope: &str, msg: &str) {
     let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
     println!("{ts} [{level}] {scope}  {msg}");
 }
 
 /// 指定した引数で AWS CLI を呼び出す Command を組み立てて返す。
+///
+/// # Arguments
+///
+/// * `args` - `aws` コマンドに渡すサブコマンドおよびオプションの配列
+///
+/// # Returns
+///
+/// 実行準備済みの `Command`。
 fn aws(args: &[&str]) -> Command {
     let mut cmd = Command::new("cmd");
     cmd.arg("/c").arg("aws").args(args);
