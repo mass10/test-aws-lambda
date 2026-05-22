@@ -4,6 +4,7 @@ use chrono::Utc;
 const FUNCTION_NAME: &str = "test-parallel-invocation";
 const ROLE_NAME: &str = "test-parallel-invocation-role";
 
+/// Lambda 関数と IAM ロールを削除するエントリポイント。
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     delete_function();
     delete_role();
@@ -11,6 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Lambda 関数を削除する。削除済みまたはエラーの場合はスキップする。
 fn delete_function() {
     let status = aws(&["lambda", "delete-function", "--function-name", FUNCTION_NAME]).status();
     match status {
@@ -19,6 +21,7 @@ fn delete_function() {
     }
 }
 
+/// アタッチされたポリシーを先に外してから IAM ロールを削除する。削除済みまたはエラーの場合はスキップする。
 fn delete_role() {
     let _ = aws(&[
         "iam", "detach-role-policy",
@@ -33,11 +36,13 @@ fn delete_role() {
     }
 }
 
+/// タイムスタンプ・レベル・スコープ付きでログを標準出力に出力する。
 fn log(level: &str, scope: &str, msg: &str) {
     let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
     println!("{ts} [{level}] {scope}  {msg}");
 }
 
+/// 指定した引数で AWS CLI を呼び出す Command を組み立てて返す。
 fn aws(args: &[&str]) -> Command {
     let mut cmd = Command::new("cmd");
     cmd.arg("/c").arg("aws").args(args);
